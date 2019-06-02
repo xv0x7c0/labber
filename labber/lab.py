@@ -3,30 +3,14 @@ import io
 import os
 
 import netdev
-from git.repo import Repo
-
-from labber.device_builder import DeviceBuilder
 
 
 class Lab:
-    def __init__(self, name, description, devices, basedir):
+    def __init__(self, name, description, devices, repository):
         self.name = name
         self.description = description
-        self.path = os.path.expanduser(basedir)
-        self.repository = self.init_repository()
-        self.devices = self.init_devices(devices)
-
-    def init_repository(self):
-        os.makedirs(self.path, exist_ok=True)
-        return Repo.init(self.path)
-
-    def init_devices(self, devices):
-        devs = []
-        for t, hosts in devices.items():
-            for h in hosts:
-                d = DeviceBuilder.build(h, h, "Cisco", "Cisco", t)
-                devs.append(d)
-        return devs
+        self.repository = repository
+        self.devices = devices
 
     async def run(self, func, devices, *args):
         tasks = [getattr(dev, func)(*args) for dev in devices]
