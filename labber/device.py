@@ -1,38 +1,34 @@
-import asyncio
-import io
-import netdev
 import os
+import tempfile
+
+import asyncssh
+import netdev
 
 
 class Device:
-    def __init__(self, hostname, filename, device_type, repository, username, password):
+    def __init__(self, hostname, filename, username, password):
         self.hostname = hostname
         self.filename = filename
-        self.device_type = device_type
-        self.repository = repository
         self.username = username
         self.password = password
 
-    def netdev(self):
-        return {
-            "host": self.hostname,
-            "device_type": self.device_type,
-            "username": self.username,
-            "password": self.password,
-        }
+    def __iter__(self):
+        yield "host", self.hostname
+        yield "device_type", self.device_type
+        yield "username", self.username
+        yield "password", self.password
 
-    def checkout(self, commit_id="HEAD"):
-        c = self.repository.commit(commit_id)
-        f = c.tree / self.filename
-        with io.BytesIO(f.data_stream.read()) as file:
-            return file.read().decode("utf-8")
-
-    def write(self, config):
-        dst = os.path.join(self.repository.working_tree_dir, self.filename)
-        with open(dst, "w") as file:
-            file.write(config)
-
-    async def get(self):
-        async with netdev.create(**self.netdev()) as node:
-            config = await node.send_command("show run")
-            self.write("\n".join(config.splitlines()[3:]))
+    async def send_config(self, configs):
+        config = next(config[1] for config in configs if config[0] is self)
+        config = config[:-1]
+        tmpfile = tempfile.NamedTemporaryFile("w", delete=False)
+        tmpfile.write(config)
+        tmpfile.close()
+        async with asyncssh.connect(
+            self.hostname,
+            username=self.username,
+            password=self.password,
+            known_hosts=None,
+        ) as conn:
+            await asyncssh.scp(tmpfile.name, (conn, self._scp_path))
+        os.unlink(tmpfile.name)
